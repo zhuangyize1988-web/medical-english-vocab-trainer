@@ -18,6 +18,9 @@ const state = {
   memory: JSON.parse(localStorage.getItem("medicalVocabMemory") || "{}"),
   voices: [],
   voice: null,
+  utterance: null,
+  pendingSpeech: "",
+  speechUnlocked: !isLikelyMobileDevice(),
   preview: false,
   previewDeck: [],
   previewIndex: 0
@@ -127,6 +130,8 @@ async function init() {
   migrateFamilyProgress();
   normalizeMemoryRecords();
   loadVoices();
+  window.setTimeout(loadVoices, 300);
+  window.setTimeout(loadVoices, 1200);
   buildDailySession();
   bindEvents();
   initMobileNavigation();
@@ -138,6 +143,8 @@ async function init() {
   renderCard();
   if (window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = loadVoices;
+    document.addEventListener("pointerdown", unlockSpeech, { capture: true, once: true });
+    document.addEventListener("touchstart", unlockSpeech, { capture: true, once: true, passive: true });
   }
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
@@ -2138,14 +2145,43 @@ function currentAnswerText() {
 
 function speak(text) {
   if (!window.speechSynthesis || !text) return;
-  window.speechSynthesis.cancel();
+  const cleanText = String(text).trim();
+  if (!cleanText) return;
+  if (!state.speechUnlocked) {
+    state.pendingSpeech = cleanText;
+    return;
+  }
+  speakNow(cleanText);
+}
+
+function speakNow(text) {
+  const synthesizer = window.speechSynthesis;
+  if (!synthesizer) return;
+  synthesizer.cancel();
+  synthesizer.resume();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-US";
   if (state.voice) utterance.voice = state.voice;
   utterance.rate = 0.82;
   utterance.pitch = 1;
   utterance.volume = 1;
-  window.speechSynthesis.speak(utterance);
+  utterance.onend = utterance.onerror = () => {
+    if (state.utterance === utterance) state.utterance = null;
+  };
+  state.utterance = utterance;
+  state.pendingSpeech = "";
+  synthesizer.speak(utterance);
+}
+
+function unlockSpeech() {
+  if (state.speechUnlocked) return;
+  state.speechUnlocked = true;
+  const queuedText = state.pendingSpeech || currentAnswerText();
+  if (queuedText) speakNow(queuedText);
+}
+
+function isLikelyMobileDevice() {
+  return window.matchMedia?.("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
 function loadVoices() {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v22-cloud-sync";
+const CACHE_NAME = "medical-vocab-v23-mobile-speech";
 const APP_SHELL = [
   "./",
   "./index.html",
