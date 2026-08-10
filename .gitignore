@@ -1,0 +1,11 @@
+.vercel
+sync-data/
+story-queue/
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+node_modules/
+data/corpus-manifest.json
+data/*.pre-*.json

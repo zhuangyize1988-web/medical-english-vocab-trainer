@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="医学考博">
+  <title>医学考博单词训练</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="topbar">
+      <div>
+        <h1>医学考博单词训练</h1>
+        <p id="deckMeta">加载词库中...</p>
+      </div>
+      <div class="stats" aria-label="今日统计">
+        <div><strong id="todayDone">0</strong><span>今日</span></div>
+        <div><strong id="accuracy">0%</strong><span>正确</span></div>
+        <div><strong id="dueCount">0</strong><span>剩余</span></div>
+      </div>
+    </section>
+
+    <section class="controls" data-app-view="study" aria-label="练习设置">
+      <div class="mode-switch" aria-label="单词训练模式">
+        <button class="mode active" data-mode="en-cn">英译中</button>
+        <button class="mode" data-mode="cn-en">中译英</button>
+        <button class="mode" data-mode="listen">听音选词</button>
+      </div>
+      <details class="more-settings" open>
+        <summary>更多设置</summary>
+        <div class="settings-content">
+          <div class="sync-control">
+            <label for="syncCode">学习同步码</label>
+            <input id="syncCode" type="text" inputmode="text" maxlength="12" autocomplete="off" placeholder="电脑生成，手机输入">
+            <button id="generateSyncBtn" type="button">生成</button>
+            <button id="connectSyncBtn" type="button">连接同步</button>
+            <span id="syncStatus" role="status">尚未连接</span>
+          </div>
+          <label class="voice-picker">
+            发音
+            <select id="voiceSelect" aria-label="选择发音音色"></select>
+          </label>
+          <label class="file-button">
+            导入词库
+            <input id="fileInput" type="file" accept=".json,.csv,.txt">
+          </label>
+          <button id="resetBtn" class="ghost">清空记录</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="trainer" data-app-view="study" aria-live="polite">
+      <div class="word-card">
+        <div class="tag" id="category">医学核心词</div>
+        <button id="speakBtn" class="sound" title="朗读单词" aria-label="朗读单词">播放</button>
+        <button id="previewBtn" class="preview-button hidden" type="button">临时预览词库</button>
+        <h2 id="promptWord">diagnosis</h2>
+        <p id="promptHint">选择最合适的中文释义</p>
+      </div>
+
+      <section id="examMeta" class="exam-meta hidden" aria-label="真题词族信息">
+        <div id="examBadges" class="exam-badges"></div>
+        <p id="familyForms" class="family-forms"></p>
+        <div class="exam-meta-actions">
+          <button id="evidenceBtn" class="evidence-button" type="button">查看逐条真题出处</button>
+          <button id="personalNoteBtn" class="personal-note-button" type="button">添加个人笔记</button>
+        </div>
+        <div id="personalNoteEditor" class="personal-note-editor hidden">
+          <label for="personalNoteInput">我的记忆笔记</label>
+          <textarea id="personalNoteInput" rows="3" maxlength="500" placeholder="例如：consume 强调消耗；consumption 是名词。也可以写自己的联想、易混词或口诀。"></textarea>
+          <div class="personal-note-actions">
+            <button id="savePersonalNoteBtn" type="button">保存笔记</button>
+            <button id="cancelPersonalNoteBtn" class="ghost" type="button">取消</button>
+          </div>
+        </div>
+        <div id="evidenceList" class="evidence-list hidden"></div>
+      </section>
+
+      <div id="recallMemory" class="recall-memory hidden">
+        <strong>错词记忆点</strong>
+        <p id="recallMemoryText"></p>
+      </div>
+
+      <div id="options" class="options"></div>
+
+      <div id="recallActions" class="recall-actions">
+        <button id="knowBtn" class="know">了解</button>
+        <button id="hintBtn" class="hint">提示一下</button>
+      </div>
+
+      <div id="contextPanel" class="context-panel hidden">
+        <p id="contextText"></p>
+        <p id="memoryTip"></p>
+        <div class="review-actions">
+          <button id="contextSpeakBtn">播放例句</button>
+          <button id="choiceBtn">看完做选择</button>
+        </div>
+      </div>
+
+      <div id="resultPanel" class="result-panel hidden">
+        <p id="resultText"></p>
+        <div id="familyMeaningList" class="family-meaning-list hidden"></div>
+        <p id="exampleText"></p>
+        <div class="review-actions">
+          <button id="againBtn">说错了</button>
+          <button id="knownBtn">说对了，下一条</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="writing-panel" data-app-view="writing">
+      <div class="writing-head">
+        <div>
+          <h2>写作训练</h2>
+          <p id="writingMeta">每日5个写作核心词 + 1条医学句子仿写</p>
+        </div>
+        <button id="resetWritingBtn" class="ghost">重置今日写作</button>
+      </div>
+
+      <div class="writing-grid">
+        <div>
+          <h3>今日句子仿写</h3>
+          <div id="writingSentences" class="writing-sentences"></div>
+        </div>
+        <div>
+          <h3>今日写作核心词</h3>
+          <div id="writingWords" class="writing-words"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrong-story-panel" data-app-view="wrong">
+      <div class="wrong-story-head">
+        <div>
+          <h2>今日错词语境完形</h2>
+          <p id="wrongStoryStatus">完成今日学习后自动生成</p>
+        </div>
+        <button id="generateStoryBtn" class="ghost hidden" type="button">生成完形</button>
+      </div>
+      <div id="wrongStoryContent" class="wrong-story-content"></div>
+      <button id="submitStoryBtn" class="story-submit hidden" type="button">提交并查看解析</button>
+    </section>
+
+    <section class="notebook" data-app-view="wrong">
+      <div>
+        <h2>长期错词记录</h2>
+        <p class="section-note">错误越多，出现越频繁；连续多次答对后才会转为熟练。</p>
+        <ul id="wrongList"></ul>
+      </div>
+      <div>
+        <h2>导入格式</h2>
+        <p>CSV: word,meaning,category,example</p>
+        <p>JSON: [{"word":"diagnosis","meaning":"诊断","category":"医学核心词","example":"..."}]</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="mobile-nav" aria-label="手机端功能切换">
+    <button class="mobile-nav-button active" data-mobile-view="study" aria-current="page">
+      <span class="nav-mark" aria-hidden="true">Aa</span>
+      <span>单词</span>
+    </button>
+    <button class="mobile-nav-button" data-mobile-view="writing">
+      <span class="nav-mark" aria-hidden="true">译</span>
+      <span>写作</span>
+    </button>
+    <button class="mobile-nav-button" data-mobile-view="wrong">
+      <span class="nav-mark" aria-hidden="true">!</span>
+      <span>错词</span>
+    </button>
+  </nav>
+
+  <script src="data/words.js"></script>
+  <script src="data/aliases.js"></script>
+  <script src="data/memory-notes.js"></script>
+  <script src="data/writing.js"></script>
+  <script src="data/writing-exam.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

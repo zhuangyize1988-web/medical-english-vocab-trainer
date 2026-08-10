@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["items"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["word", "sentence", "translation"],
+        "properties": {
+          "word": { "type": "string" },
+          "sentence": { "type": "string" },
+          "translation": { "type": "string" }
+        }
+      }
+    }
+  }
+}

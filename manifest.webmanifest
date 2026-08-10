@@ -1,0 +1,19 @@
+{
+  "name": "医学考博英语训练",
+  "short_name": "医学考博",
+  "description": "医学考博单词、写作与错词复习",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
