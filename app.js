@@ -104,6 +104,10 @@ const syncState = {
   busy: false,
   ready: false
 };
+const cloudSyncConfig = {
+  url: String(window.CLOUD_SYNC_CONFIG?.url || "").replace(/\/$/, ""),
+  publishableKey: String(window.CLOUD_SYNC_CONFIG?.publishableKey || "")
+};
 let nextTimer = null;
 let storyRequestInFlight = false;
 let storyGenerationPending = false;
@@ -266,14 +270,12 @@ async function synchronizeInitial() {
   syncState.busy = true;
   setSyncStatus("正在同步...");
   try {
-    const response = await fetch(`/api/sync?code=${encodeURIComponent(syncState.code)}`);
-    if (response.status === 404) {
+    const remote = await fetchSyncRecord(syncState.code);
+    if (!remote) {
       syncState.busy = false;
       await pushSyncNow();
       return;
     }
-    if (!response.ok) throw new Error("sync unavailable");
-    const remote = await response.json();
     const lastSync = Number(localStorage.getItem("medicalVocabLastSyncAt") || 0);
     const localChanged = Number(localStorage.getItem("medicalVocabLocalChangedAt") || 0);
     if (remote.updatedAt > lastSync) {
@@ -335,13 +337,7 @@ async function pushSyncNow() {
   syncState.busy = true;
   setSyncStatus("正在保存...");
   try {
-    const response = await fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: syncState.code, data: collectSyncData() })
-    });
-    if (!response.ok) throw new Error("sync unavailable");
-    const result = await response.json();
+    const result = await writeSyncRecord(syncState.code, collectSyncData());
     localStorage.setItem("medicalVocabLastSyncAt", String(result.updatedAt || Date.now()));
     localStorage.removeItem("medicalVocabLocalChangedAt");
     setSyncStatus("已同步");
@@ -350,6 +346,65 @@ async function pushSyncNow() {
   } finally {
     syncState.busy = false;
   }
+}
+
+function hasCloudSync() {
+  return Boolean(cloudSyncConfig.url && cloudSyncConfig.publishableKey);
+}
+
+async function fetchSyncRecord(code) {
+  if (!hasCloudSync()) {
+    const response = await fetch(`/api/sync?code=${encodeURIComponent(code)}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("sync unavailable");
+    return response.json();
+  }
+  const syncId = await hashSyncCode(code);
+  const rows = await callCloudSync("get_vocab_sync", { p_sync_id: syncId });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row) return null;
+  return {
+    data: row.payload || {},
+    updatedAt: Number(row.updated_at || 0)
+  };
+}
+
+async function writeSyncRecord(code, data) {
+  if (!hasCloudSync()) {
+    const response = await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, data })
+    });
+    if (!response.ok) throw new Error("sync unavailable");
+    return response.json();
+  }
+  const syncId = await hashSyncCode(code);
+  const rows = await callCloudSync("upsert_vocab_sync", {
+    p_sync_id: syncId,
+    p_payload: data
+  });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  return { updatedAt: Number(row?.updated_at || Date.now()) };
+}
+
+async function callCloudSync(functionName, payload) {
+  const response = await fetch(`${cloudSyncConfig.url}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: cloudSyncConfig.publishableKey
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(`cloud sync unavailable (${response.status})`);
+  return response.json();
+}
+
+async function hashSyncCode(code) {
+  const bytes = new TextEncoder().encode(`medical-vocab-sync:${normalizeSyncCode(code)}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
 }
 
 function mergeSyncData(remote, local) {

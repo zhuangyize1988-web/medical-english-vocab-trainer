@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v21-personal-notes";
+const CACHE_NAME = "medical-vocab-v22-cloud-sync";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./data/memory-notes.js",
   "./data/writing.js",
   "./data/writing-exam.js",
+  "./data/cloud-config.js",
   "./manifest.webmanifest",
   "./app-icon.svg"
 ];
