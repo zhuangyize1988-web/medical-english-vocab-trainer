@@ -1,5 +1,9 @@
 # 医学考博单词训练小程序
 
+在线学习地址：<https://zhuangyize1988-web.github.io/medical-english-vocab-trainer/>
+
+GitHub Pages 版本可在外网直接使用，学习记录默认保存在当前设备浏览器中；跨设备同步仍需在线同步服务。
+
 双击 `start-local.bat` 后即可使用。它会先在后台启动服务，再打开 `http://127.0.0.1:8787/`；手机与电脑连接同一 Wi-Fi 时，可使用电脑的局域网地址访问。
 
 ## 功能
