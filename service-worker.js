@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v23-mobile-speech";
+const CACHE_NAME = "medical-vocab-v24-audio-fallback";
 const APP_SHELL = [
   "./",
   "./index.html",

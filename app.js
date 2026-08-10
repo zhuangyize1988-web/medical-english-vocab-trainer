@@ -19,8 +19,9 @@ const state = {
   voices: [],
   voice: null,
   utterance: null,
+  audio: null,
   pendingSpeech: "",
-  speechUnlocked: !isLikelyMobileDevice(),
+  speechUnlocked: !isLikelyMobileDevice() && Boolean(window.speechSynthesis),
   preview: false,
   previewDeck: [],
   previewIndex: 0
@@ -143,9 +144,9 @@ async function init() {
   renderCard();
   if (window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = loadVoices;
-    document.addEventListener("pointerdown", unlockSpeech, { capture: true, once: true });
-    document.addEventListener("touchstart", unlockSpeech, { capture: true, once: true, passive: true });
   }
+  document.addEventListener("pointerdown", unlockSpeech, { capture: true, once: true });
+  document.addEventListener("touchstart", unlockSpeech, { capture: true, once: true, passive: true });
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
   }
@@ -2144,7 +2145,7 @@ function currentAnswerText() {
 }
 
 function speak(text) {
-  if (!window.speechSynthesis || !text) return;
+  if (!text) return;
   const cleanText = String(text).trim();
   if (!cleanText) return;
   if (!state.speechUnlocked) {
@@ -2156,7 +2157,11 @@ function speak(text) {
 
 function speakNow(text) {
   const synthesizer = window.speechSynthesis;
-  if (!synthesizer) return;
+  const hasUsableVoice = state.voices.some(voice => /^en/i.test(voice.lang));
+  if (!synthesizer || !hasUsableVoice) {
+    speakWithOnlineAudio(text);
+    return;
+  }
   synthesizer.cancel();
   synthesizer.resume();
   const utterance = new SpeechSynthesisUtterance(text);
@@ -2171,6 +2176,23 @@ function speakNow(text) {
   state.utterance = utterance;
   state.pendingSpeech = "";
   synthesizer.speak(utterance);
+}
+
+function speakWithOnlineAudio(text) {
+  if (state.audio) {
+    state.audio.pause();
+    state.audio.currentTime = 0;
+  }
+  const source = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`;
+  const audio = new Audio(source);
+  audio.preload = "auto";
+  state.audio = audio;
+  state.pendingSpeech = "";
+  audio.play().catch(() => {
+    if (state.audio !== audio) return;
+    state.pendingSpeech = text;
+    state.speechUnlocked = false;
+  });
 }
 
 function unlockSpeech() {
@@ -2213,7 +2235,7 @@ function renderVoiceOptions() {
   els.voiceSelect.innerHTML = "";
   if (!englishVoices.length) {
     const option = document.createElement("option");
-    option.textContent = "默认英语发音";
+    option.textContent = "在线美式发音";
     option.value = "";
     els.voiceSelect.appendChild(option);
     return;
