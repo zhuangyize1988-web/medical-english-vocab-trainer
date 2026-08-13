@@ -284,7 +284,7 @@ async function synchronizeInitial() {
       await pushSyncNow();
       return;
     }
-    const lastSync = Number(localStorage.getItem("medicalVocabLastSyncAt") || 0);
+    const lastSync = getLastSyncAt();
     const localChanged = Number(localStorage.getItem("medicalVocabLocalChangedAt") || 0);
     if (remote.updatedAt > lastSync) {
       const merged = mergeSyncData(remote.data || {}, collectSyncData());
@@ -322,7 +322,7 @@ function applySyncData(data, updatedAt) {
   syncStorageKeys.forEach(key => {
     if (data[key] !== undefined) localStorage.setItem(key, JSON.stringify(data[key]));
   });
-  localStorage.setItem("medicalVocabLastSyncAt", String(updatedAt || Date.now()));
+  setLastSyncAt(updatedAt || Date.now());
   localStorage.setItem("medicalVocabLocalChangedAt", String(Date.now()));
   setSyncStatus("已合并，正在刷新...");
   window.location.reload();
@@ -345,8 +345,12 @@ async function pushSyncNow() {
   syncState.busy = true;
   setSyncStatus("正在保存...");
   try {
-    const result = await writeSyncRecord(syncState.code, collectSyncData());
-    localStorage.setItem("medicalVocabLastSyncAt", String(result.updatedAt || Date.now()));
+    const localData = collectSyncData();
+    const remote = await fetchSyncRecord(syncState.code);
+    const dataToSave = remote ? mergeSyncData(remote.data || {}, localData) : localData;
+    const result = await writeSyncRecord(syncState.code, dataToSave);
+    persistMergedSyncData(dataToSave);
+    setLastSyncAt(result.updatedAt || Date.now());
     localStorage.removeItem("medicalVocabLocalChangedAt");
     setSyncStatus("已同步");
   } catch (error) {
@@ -354,6 +358,22 @@ async function pushSyncNow() {
   } finally {
     syncState.busy = false;
   }
+}
+
+function persistMergedSyncData(data) {
+  syncStorageKeys.forEach(key => {
+    if (data[key] !== undefined) localStorage.setItem(key, JSON.stringify(data[key]));
+  });
+}
+
+function getLastSyncAt() {
+  if (!syncState.code) return 0;
+  return Number(localStorage.getItem(`medicalVocabLastSyncAt:${syncState.code}`) || 0);
+}
+
+function setLastSyncAt(timestamp) {
+  if (!syncState.code) return;
+  localStorage.setItem(`medicalVocabLastSyncAt:${syncState.code}`, String(timestamp));
 }
 
 function hasCloudSync() {
