@@ -278,7 +278,7 @@ async function synchronizeInitial() {
   syncState.busy = true;
   setSyncStatus("正在同步...");
   try {
-    const remote = await fetchSyncRecord(syncState.code);
+    const remote = await fetchSyncBundle(syncState.code);
     if (!remote) {
       syncState.busy = false;
       await pushSyncNow();
@@ -296,7 +296,8 @@ async function synchronizeInitial() {
       await pushSyncNow();
       return;
     }
-    setSyncStatus("已同步");
+    const summary = summarizeSyncData(remote.data || collectSyncData());
+    setSyncStatus(`已同步：累计 ${summary.learned} 词，保留14天恢复点`);
   } catch (error) {
     setSyncStatus("当前地址暂不能同步", true);
   } finally {
@@ -330,9 +331,32 @@ function applySyncData(data, updatedAt) {
 
 function scheduleSync() {
   if (!syncState.ready || !syncState.code) return;
+  saveLocalRecoveryPoint();
   localStorage.setItem("medicalVocabLocalChangedAt", String(Date.now()));
   clearTimeout(syncState.timer);
   syncState.timer = setTimeout(pushSyncNow, 900);
+}
+
+function saveLocalRecoveryPoint() {
+  const data = collectSyncData();
+  const summary = summarizeSyncData(data);
+  if (!summary.learned && !summary.totalSeen) return;
+  const key = `medicalVocabRecovery:${getTodayKey()}`;
+  const existing = localStorage.getItem(key);
+  let merged = data;
+  if (existing) {
+    try {
+      merged = mergeSyncData(JSON.parse(existing)?.data || {}, data);
+    } catch (error) {
+      merged = data;
+    }
+  }
+  localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: merged }));
+  Object.keys(localStorage)
+    .filter(item => item.startsWith("medicalVocabRecovery:"))
+    .sort()
+    .slice(0, -14)
+    .forEach(item => localStorage.removeItem(item));
 }
 
 async function pushSyncNow() {
@@ -345,14 +369,16 @@ async function pushSyncNow() {
   syncState.busy = true;
   setSyncStatus("正在保存...");
   try {
-    const localData = collectSyncData();
-    const remote = await fetchSyncRecord(syncState.code);
-    const dataToSave = remote ? mergeSyncData(remote.data || {}, localData) : localData;
+    let dataToSave = collectSyncData();
+    const remote = await fetchSyncBundle(syncState.code);
+    if (remote) dataToSave = mergeSyncData(remote.data || {}, dataToSave);
+    await writeSyncBackup(syncState.code, dataToSave);
     const result = await writeSyncRecord(syncState.code, dataToSave);
     persistMergedSyncData(dataToSave);
     setLastSyncAt(result.updatedAt || Date.now());
     localStorage.removeItem("medicalVocabLocalChangedAt");
-    setSyncStatus("已同步");
+    const summary = summarizeSyncData(dataToSave);
+    setSyncStatus(`已同步：累计 ${summary.learned} 词，保留14天恢复点`);
   } catch (error) {
     setSyncStatus("保存失败，稍后重试", true);
   } finally {
@@ -397,6 +423,21 @@ async function fetchSyncRecord(code) {
   };
 }
 
+async function fetchSyncBundle(code) {
+  const main = await fetchSyncRecord(code);
+  if (!hasCloudSync()) return main;
+  const backups = await Promise.all(
+    recentBackupKeys(14).map(key => fetchCloudRecordById(hashSyncNamespace(code, key)).catch(() => null))
+  );
+  const records = [main, ...backups].filter(Boolean);
+  if (!records.length) return null;
+  const data = records.reduce((merged, record) => mergeSyncData(merged, record.data || {}), {});
+  return {
+    data,
+    updatedAt: Math.max(...records.map(record => Number(record.updatedAt || 0)))
+  };
+}
+
 async function writeSyncRecord(code, data) {
   if (!hasCloudSync()) {
     const response = await fetch("/api/sync", {
@@ -416,6 +457,47 @@ async function writeSyncRecord(code, data) {
   return { updatedAt: Number(row?.updated_at || Date.now()) };
 }
 
+async function writeSyncBackup(code, data) {
+  if (!hasCloudSync()) return;
+  const backupId = await hashSyncNamespace(code, recentBackupKeys(1)[0]);
+  const existing = await fetchCloudRecordById(backupId).catch(() => null);
+  const merged = existing ? mergeSyncData(existing.data || {}, data) : data;
+  await writeCloudRecordById(backupId, merged);
+}
+
+async function fetchCloudRecordById(syncIdPromise) {
+  const syncId = await syncIdPromise;
+  const rows = await callCloudSync("get_vocab_sync", { p_sync_id: syncId });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row) return null;
+  return { data: row.payload || {}, updatedAt: Number(row.updated_at || 0) };
+}
+
+async function writeCloudRecordById(syncId, data) {
+  const rows = await callCloudSync("upsert_vocab_sync", {
+    p_sync_id: syncId,
+    p_payload: data
+  });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  return { updatedAt: Number(row?.updated_at || Date.now()) };
+}
+
+function recentBackupKeys(days) {
+  return Array.from({ length: days }, (_, offset) => {
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+    return `daily-backup:${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  });
+}
+
+function summarizeSyncData(data) {
+  const records = Object.values(data?.medicalVocabMemory || {});
+  return {
+    learned: records.filter(record => Number(record?.seen || 0) > 0).length,
+    totalSeen: records.reduce((sum, record) => sum + Number(record?.seen || 0), 0)
+  };
+}
+
 async function callCloudSync(functionName, payload) {
   const response = await fetch(`${cloudSyncConfig.url}/rest/v1/rpc/${functionName}`, {
     method: "POST",
@@ -431,6 +513,13 @@ async function callCloudSync(functionName, payload) {
 
 async function hashSyncCode(code) {
   const bytes = new TextEncoder().encode(`medical-vocab-sync:${normalizeSyncCode(code)}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashSyncNamespace(code, namespace) {
+  const normalizedCode = normalizeSyncCode(code);
+  const bytes = new TextEncoder().encode(`medical-vocab-sync:${normalizedCode}:${namespace}`);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
 }
@@ -462,16 +551,52 @@ function mergeVocabularyMemory(remote = {}, local = {}) {
   keys.forEach(key => {
     const remoteRecord = normalizeMemoryRecord(remote?.[key]);
     const localRecord = normalizeMemoryRecord(local?.[key]);
+    const latestRecord = localRecord.updatedAt >= remoteRecord.updatedAt ? localRecord : remoteRecord;
     const latestNote = localRecord.personalNoteUpdatedAt >= remoteRecord.personalNoteUpdatedAt
       ? localRecord
       : remoteRecord;
+    const formStats = mergeFormStats(remoteRecord.formStats, localRecord.formStats);
+    const history = mergeAnswerHistory(remoteRecord.history, localRecord.history);
     merged[key] = {
-      ...normalizeMemoryRecord(merged[key]),
+      ...latestRecord,
+      seen: Math.max(remoteRecord.seen, localRecord.seen),
+      correct: Math.max(remoteRecord.correct, localRecord.correct),
+      wrongCount: Math.max(remoteRecord.wrongCount, localRecord.wrongCount),
+      lapseScore: Math.max(remoteRecord.lapseScore, localRecord.lapseScore),
+      lastWrongAt: Math.max(remoteRecord.lastWrongAt, localRecord.lastWrongAt),
+      mastered: remoteRecord.mastered || localRecord.mastered,
       personalNote: latestNote.personalNote,
-      personalNoteUpdatedAt: latestNote.personalNoteUpdatedAt
+      personalNoteUpdatedAt: latestNote.personalNoteUpdatedAt,
+      history,
+      formStats
     };
   });
   return merged;
+}
+
+function mergeFormStats(remote = {}, local = {}) {
+  const merged = {};
+  const keys = new Set([...Object.keys(remote || {}), ...Object.keys(local || {})]);
+  keys.forEach(key => {
+    const a = remote?.[key] || {};
+    const b = local?.[key] || {};
+    merged[key] = {
+      seen: Math.max(Number(a.seen || 0), Number(b.seen || 0)),
+      correct: Math.max(Number(a.correct || 0), Number(b.correct || 0)),
+      wrongCount: Math.max(Number(a.wrongCount || 0), Number(b.wrongCount || 0)),
+      lastSeen: Math.max(Number(a.lastSeen || 0), Number(b.lastSeen || 0))
+    };
+  });
+  return merged;
+}
+
+function mergeAnswerHistory(remote = [], local = []) {
+  const events = new Map();
+  [...remote, ...local].forEach(event => {
+    const key = `${Number(event?.at || 0)}:${String(event?.result || "")}:${Number(event?.level || 0)}`;
+    events.set(key, event);
+  });
+  return [...events.values()].sort((a, b) => Number(a?.at || 0) - Number(b?.at || 0)).slice(-30);
 }
 
 function mergeProgressRecords(remote = {}, local = {}, scoreField) {
