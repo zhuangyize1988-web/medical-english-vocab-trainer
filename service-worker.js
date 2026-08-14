@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v26-redundant-backups";
+const CACHE_NAME = "medical-vocab-v27-profile-lock";
 const APP_SHELL = [
   "./",
   "./index.html",

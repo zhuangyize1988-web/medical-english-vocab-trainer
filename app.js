@@ -228,6 +228,7 @@ function setMobileView(view, moveToTop = true) {
 
 function initSync() {
   els.syncCode.value = syncState.code;
+  renderSyncCodeLock();
   if (!syncState.code) {
     setSyncStatus("尚未连接");
     return;
@@ -238,6 +239,16 @@ function initSync() {
 }
 
 function generateSyncCode() {
+  if (syncState.code && els.syncCode.readOnly) {
+    const confirmed = confirm("当前同步码已绑定学习档案。只有确实要切换档案时才继续；原学习记录不会删除。是否准备更换同步码？");
+    if (!confirmed) return;
+    els.syncCode.readOnly = false;
+    els.syncCode.value = "";
+    els.generateSyncBtn.textContent = "生成新码";
+    setSyncStatus("请输入原同步码，或再次点击生成新码");
+    els.syncCode.focus();
+    return;
+  }
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
@@ -261,7 +272,15 @@ function connectSync() {
   startSyncWatchers();
   els.syncCode.value = code;
   localStorage.setItem("medicalVocabSyncCode", code);
+  renderSyncCodeLock();
   synchronizeInitial();
+}
+
+function renderSyncCodeLock() {
+  const locked = Boolean(syncState.code);
+  els.syncCode.readOnly = locked;
+  els.generateSyncBtn.textContent = locked ? "更换" : "生成";
+  els.generateSyncBtn.title = locked ? "更换同步码需要再次确认" : "生成新的学习同步码";
 }
 
 function startSyncWatchers() {
