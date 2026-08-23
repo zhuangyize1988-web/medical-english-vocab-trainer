@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v29-morphology";
+const CACHE_NAME = "medical-vocab-v30-morphology";
 const APP_SHELL = [
   "./",
   "./index.html",

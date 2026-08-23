@@ -78,8 +78,7 @@
     const core = word.slice(coreStart, Math.max(coreStart, coreEnd));
     const root = longestMatch(roots, token => {
       if (token.length >= 4) return core.includes(token) || word.includes(token);
-      return core === token || core.startsWith(token) || core.endsWith(token)
-        || word.startsWith(token) || word.endsWith(token);
+      return core === token || core.startsWith(token) || word.startsWith(token);
     });
 
     // A prefix and suffix alone can create a plausible-looking but false split.
