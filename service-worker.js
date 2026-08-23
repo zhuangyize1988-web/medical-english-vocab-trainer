@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v27-profile-lock";
+const CACHE_NAME = "medical-vocab-v28-2024-image-vocab";
 const APP_SHELL = [
   "./",
   "./index.html",
