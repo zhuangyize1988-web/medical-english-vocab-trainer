@@ -1,4 +1,4 @@
-const CACHE_NAME = "medical-vocab-v28-2024-image-vocab";
+const CACHE_NAME = "medical-vocab-v29-morphology";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const APP_SHELL = [
   "./data/words.json",
   "./data/aliases.js",
   "./data/memory-notes.js",
+  "./data/morphology.js",
   "./data/writing.js",
   "./data/writing-exam.js",
   "./data/cloud-config.js",

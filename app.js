@@ -89,7 +89,7 @@ const DAILY_WORD_LIMIT = 70;
 const HISTORICAL_REVIEW_LIMIT = 20;
 const DAILY_SESSION_VERSION = 4;
 const CATALOG_MIGRATION_VERSION = 3;
-const MEMORY_NOTES_VERSION = Math.max(5, Number(window.MEMORY_NOTES_VERSION || 0));
+const MEMORY_NOTES_VERSION = Math.max(6, Number(window.MEMORY_NOTES_VERSION || 0));
 const WRITING_WORD_LIMIT = 5;
 const WRITING_SENTENCE_LIMIT = 1;
 const syncStorageKeys = [
@@ -1034,11 +1034,12 @@ function savePersonalNote() {
 function renderRecallMemory(record) {
   const hasWrongHistory = record.wrongCount > 0;
   const notes = [];
+  const latestSystemNote = state.current ? buildStoredMemoryNote(state.current) : record.memoryNote;
   if (record.personalNote) {
     notes.push(`<span class="recall-note-personal"><b>我的笔记：</b>${escapeHtml(record.personalNote).replace(/\n/g, "<br>")}</span>`);
   }
-  if (record.memoryNote) {
-    notes.push(`<span class="recall-note-system"><b>系统记忆点：</b>${escapeHtml(record.memoryNote)}</span>`);
+  if (latestSystemNote) {
+    notes.push(`<span class="recall-note-system"><b>系统记忆点：</b>${escapeHtml(latestSystemNote)}</span>`);
   }
   els.recallMemoryText.innerHTML = notes.join("");
   els.recallMemory.classList.toggle("hidden", !hasWrongHistory || !notes.length);
@@ -1406,7 +1407,7 @@ function renderWrongList() {
       <span>${escapeHtml(word.meaning)}</span>
       <small>累计错 ${record.wrongCount} 次 · 连续答对 ${record.consecutiveCorrect} 次 · ${escapeHtml(formatDue(record.due))}</small>
       ${record.personalNote ? `<p class="wrong-personal-note"><b>我的笔记：</b>${escapeHtml(record.personalNote).replace(/\n/g, "<br>")}</p>` : ""}
-      <p><b>系统记忆点：</b>${escapeHtml(record.memoryNote || buildStoredMemoryNote(word))}</p>
+      <p><b>系统记忆点：</b>${escapeHtml(buildStoredMemoryNote(word) || record.memoryNote)}</p>
     `;
     els.wrongList.appendChild(li);
   });
@@ -2192,7 +2193,9 @@ function translateContextForStudy(sentence, word) {
 }
 
 function buildBetterMemoryTip(word) {
-  if (word?.memory?.summary) return String(word.memory.summary);
+  const curatedSummary = word?.memory?.summary ? String(word.memory.summary) : "";
+  const curatedMorphology = window.MEDICAL_MORPHOLOGY?.format(word.word) || "";
+  if (curatedSummary) return [curatedMorphology, curatedSummary].filter(Boolean).join("；");
   const lower = word.word.toLowerCase();
   const roots = [
     ["ab", "ab- = 离开/异常"],
@@ -2268,6 +2271,8 @@ function buildBetterMemoryTip(word) {
     ["ment", "词族：名词后缀 -ment，表示行为/结果"]
   ];
   const parts = [];
+  const morphology = window.MEDICAL_MORPHOLOGY?.format(word.word);
+  if (morphology) parts.push(morphology);
   const prefixRoots = new Set(["ab", "ad", "anti", "auto", "hyper", "hypo", "micro", "trans"]);
   const root = roots.find(([key]) => prefixRoots.has(key) ? lower.startsWith(key) : lower.includes(key));
   const suffix = suffixes.find(([key]) => lower.endsWith(key));
@@ -2280,9 +2285,10 @@ function buildBetterMemoryTip(word) {
 }
 
 function buildStoredMemoryNote(word) {
-  if (word?.memory?.summary) return String(word.memory.summary);
+  const morphology = window.MEDICAL_MORPHOLOGY?.format(word.word) || "";
+  if (word?.memory?.summary) return [morphology, String(word.memory.summary)].filter(Boolean).join("；");
   const generated = window.MEMORY_NOTES?.[word.word];
-  if (generated) return String(generated);
+  if (generated) return [morphology, String(generated)].filter(Boolean).join("；");
   const fullTip = buildBetterMemoryTip(word);
   const answerMarker = fullTip.indexOf("；记忆点：");
   const clueOnly = answerMarker >= 0 ? fullTip.slice(0, answerMarker) : "";
